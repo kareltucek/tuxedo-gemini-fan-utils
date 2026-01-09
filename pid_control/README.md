@@ -199,10 +199,53 @@ ls -l /dev/tuxedo_io
 lsmod | grep tuxedo_io
 ```
 
+## Code Structure
+
+The PID controller is organized into multiple modules:
+
+```
+pid_control/
+├── __init__.py              - Package initialization
+├── fan-pid-control.py       - Main script (entry point)
+├── pid_controller.py        - PID algorithm implementation
+├── fan_controller.py        - Hardware interface (fanctl wrapper)
+├── config.py                - Configuration and validation
+└── README.md                - This file
+```
+
+### Modules
+
+**fan-pid-control.py**
+- Main entry point
+- Argument parsing
+- Control loop
+- Signal handling
+
+**pid_controller.py**
+- `PIDController` class
+- PID algorithm with P, I, D terms
+- Anti-windup protection
+- Output clamping
+
+**fan_controller.py**
+- `FanController` class
+- Interfaces with `fanctl` binary
+- Parses fan status output
+- Sends fan speed commands
+
+**config.py**
+- `PIDConfig` class - PID tuning parameters
+- `ValidationConfig` class - Input validation limits
+- `validate_arguments()` function
+
 ## Architecture
 
 ```
 fan-pid-control.py
+    |
+    | imports
+    v
+pid_controller.py, fan_controller.py, config.py
     |
     | subprocess calls
     v
