@@ -17,16 +17,18 @@ class PIDConfig:
 
     # Ki: Integral gain - higher = faster elimination of steady-state error
     # Default: 0.2 provides gradual correction of persistent offset
+    # DISABLED: Set to 0 to avoid overshoot and oscillation
     KI = 0.2
 
     # Kd: Derivative gain - higher = more damping of oscillations
     # Default: 1.0 provides moderate damping
-    KD = 1.0
+    # DISABLED: Redundant with Kt (temperature derivative)
+    KD = 5
 
     # Kt: Temperature derivative gain - responds to rate of temperature change
     # This makes the controller react immediately to temperature changes
     # Default: 5.0 means increase fan 5% per degree/second temperature rise
-    KT = 5.0
+    KT = 0
 
 
 class ValidationConfig:
