@@ -12,7 +12,7 @@ Direct fan control for Tuxedo Gemini Gen2 laptops (and other Uniwill-based Tuxed
 
 ```bash
 # Make the script executable
-chmod +x tuxedo_fan_control.py
+chmod +x fan_control.py
 
 # Check if tuxedo_io module is loaded
 lsmod | grep tuxedo_io
@@ -26,7 +26,7 @@ ls -l /dev/tuxedo_io
 ### Show Current Fan Status
 
 ```bash
-sudo ./tuxedo_fan_control.py status
+sudo ./fan_control.py status
 ```
 
 Output example:
@@ -49,16 +49,16 @@ Fan 1 (GPU):
 
 ```bash
 # Set CPU fan (fan 0) to 50%
-sudo ./tuxedo_fan_control.py set 0 50
+sudo ./fan_control.py set 0 50
 
 # Set GPU fan (fan 1) to 75%
-sudo ./tuxedo_fan_control.py set 1 75
+sudo ./fan_control.py set 1 75
 ```
 
 ### Return to Automatic Control
 
 ```bash
-sudo ./tuxedo_fan_control.py auto
+sudo ./fan_control.py auto
 ```
 
 This returns control to the BIOS automatic fan management.
@@ -122,7 +122,7 @@ This is why you need device-specific utilities like this one or the full `tccd` 
 
 ```
 User Space:
-  tuxedo_fan_control.py (this utility)
+  fan_control.py (this utility)
          |
          | ioctl() system calls
          v

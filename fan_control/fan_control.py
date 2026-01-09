@@ -62,7 +62,7 @@ class TuxedoFanControl:
             self.dev = open(self.device_path, 'rb+', buffering=0)
         except PermissionError:
             print(f"ERROR: Permission denied accessing {self.device_path}", file=sys.stderr)
-            print("This utility requires root privileges. Try: sudo python3 tuxedo_fan_control.py", file=sys.stderr)
+            print("This utility requires root privileges. Try: sudo python3 fan_control.py", file=sys.stderr)
             sys.exit(1)
         except FileNotFoundError:
             print(f"ERROR: Device {self.device_path} not found", file=sys.stderr)
@@ -205,7 +205,7 @@ def cmd_auto(args):
 def main():
     parser = argparse.ArgumentParser(
         description='Tuxedo Gemini Gen2 Fan Control Utility',
-        epilog='Requires root privileges. Example: sudo python3 tuxedo_fan_control.py status'
+        epilog='Requires root privileges. Example: sudo python3 fan_control.py status'
     )
 
     subparsers = parser.add_subparsers(dest='command', help='Commands')
