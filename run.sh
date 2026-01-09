@@ -1,5 +1,6 @@
 #!/bin/bash
 
-systemctl stop tccd 
-sudo ./pid_control/fan-pid-control.py 10 30 70
+# systemctl stop tccd 
+
+sudo ./pid_control/fan-pid-control.py 10 30 65
 

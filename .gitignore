@@ -1,2 +1,7 @@
 fan_control/fanctl
 set.sh
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

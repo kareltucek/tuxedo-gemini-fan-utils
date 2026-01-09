@@ -3,20 +3,24 @@
 PID-based fan controller for Tuxedo Gemini Gen2
 
 Maintains target temperature using a PID (Proportional-Integral-Derivative) controller.
-Runs continuously, adjusting fan speeds once per second.
+Runs continuously, adjusting fan speeds at specified interval.
 
 Usage:
-    sudo ./fan-pid-control.py [-t] <min_speed> <max_speed> <target_temp>
+    sudo ./fan-pid-control.py [-t] [-i interval] <min_speed> <max_speed> <target_temp>
 
 Arguments:
-    -t           - Test mode (print suggested speeds without setting them)
-    min_speed    - Minimum fan speed percentage (0-100)
-    max_speed    - Maximum fan speed percentage (0-100)
-    target_temp  - Target CPU temperature in Celsius
+    -t              - Test mode (print suggested speeds without setting them)
+    -i interval     - Update interval in seconds (default: 1.0)
+    min_speed       - Minimum fan speed percentage (0-100)
+    max_speed       - Maximum fan speed percentage (0-100)
+    target_temp     - Target CPU temperature in Celsius
 
 Example:
     sudo ./fan-pid-control.py 30 100 70
-    # Maintains CPU at 70°C, fan speed between 30-100%
+    # Maintains CPU at 70°C, fan speed between 30-100%, 1 Hz updates
+
+    sudo ./fan-pid-control.py -i 0.5 30 100 70
+    # Same but with 2 Hz updates (0.5 second interval)
 
     sudo ./fan-pid-control.py -t 30 100 70
     # Test mode: shows what speeds would be set without actually setting them
@@ -37,15 +41,32 @@ def parse_arguments():
     Parse command-line arguments
 
     Returns:
-        Tuple of (test_mode, min_speed_pct, max_speed_pct, target_temp)
+        Tuple of (test_mode, interval, min_speed_pct, max_speed_pct, target_temp)
     """
     test_mode = False
+    interval = 1.0  # Default 1 second
     args = sys.argv[1:]
 
     # Check for test mode flag
     if args and args[0] == '-t':
         test_mode = True
         args = args[1:]
+
+    # Check for interval flag
+    if args and args[0] == '-i':
+        if len(args) < 2:
+            print("ERROR: -i flag requires interval value", file=sys.stderr)
+            print(__doc__)
+            sys.exit(1)
+        try:
+            interval = float(args[1])
+            if interval <= 0 or interval > 10:
+                print("ERROR: interval must be between 0 and 10 seconds", file=sys.stderr)
+                sys.exit(1)
+        except ValueError:
+            print("ERROR: interval must be a number", file=sys.stderr)
+            sys.exit(1)
+        args = args[2:]
 
     if len(args) != 3:
         print(__doc__)
@@ -66,7 +87,7 @@ def parse_arguments():
         print(f"ERROR: {error_msg}", file=sys.stderr)
         sys.exit(1)
 
-    return test_mode, min_speed_pct, max_speed_pct, target_temp
+    return test_mode, interval, min_speed_pct, max_speed_pct, target_temp
 
 
 def locate_fanctl():
@@ -81,13 +102,14 @@ def locate_fanctl():
     return fanctl_path
 
 
-def print_header(test_mode, min_speed_pct, max_speed_pct, target_temp):
+def print_header(test_mode, interval, min_speed_pct, max_speed_pct, target_temp):
     """Print startup header"""
     print("=" * 70)
     print("PID Fan Controller" + (" [TEST MODE]" if test_mode else ""))
     print("=" * 70)
     print(f"Target temperature: {target_temp}°C")
     print(f"Fan speed range: {min_speed_pct}% - {max_speed_pct}%")
+    print(f"Update interval: {interval}s ({1.0/interval:.1f} Hz)")
     print(f"PID parameters: Kp={PIDConfig.KP}, Ki={PIDConfig.KI}, Kd={PIDConfig.KD}, Kt={PIDConfig.KT}")
     if test_mode:
         print("\n*** TEST MODE: Speeds will be calculated but NOT applied ***")
@@ -97,7 +119,7 @@ def print_header(test_mode, min_speed_pct, max_speed_pct, target_temp):
     print()
 
 
-def control_loop(fan_ctrl, pid, target_temp, test_mode):
+def control_loop(fan_ctrl, pid, target_temp, interval, test_mode):
     """
     Main control loop
 
@@ -105,6 +127,7 @@ def control_loop(fan_ctrl, pid, target_temp, test_mode):
         fan_ctrl: FanController instance
         pid: PIDController instance
         target_temp: Target temperature
+        interval: Update interval in seconds
         test_mode: Whether in test mode
     """
     last_time = time.time()
@@ -137,13 +160,13 @@ def control_loop(fan_ctrl, pid, target_temp, test_mode):
               f"P:{p_term:+6.2f} I:{i_term:+6.2f} D:{d_term:+6.2f} T:{t_term:+6.2f}")
 
         # Sleep until next iteration
-        time.sleep(ValidationConfig.UPDATE_INTERVAL)
+        time.sleep(interval)
 
 
 def main():
     """Main entry point"""
     # Parse command-line arguments
-    test_mode, min_speed_pct, max_speed_pct, target_temp = parse_arguments()
+    test_mode, interval, min_speed_pct, max_speed_pct, target_temp = parse_arguments()
 
     # Locate fanctl binary
     fanctl_path = locate_fanctl()
@@ -177,11 +200,11 @@ def main():
     signal.signal(signal.SIGTERM, cleanup)
 
     # Print header
-    print_header(test_mode, min_speed_pct, max_speed_pct, target_temp)
+    print_header(test_mode, interval, min_speed_pct, max_speed_pct, target_temp)
 
     # Run control loop
     try:
-        control_loop(fan_ctrl, pid, target_temp, test_mode)
+        control_loop(fan_ctrl, pid, target_temp, interval, test_mode)
     except KeyboardInterrupt:
         cleanup()
     except Exception as e:
