@@ -23,14 +23,17 @@ See `fan_control/README.md` for detailed documentation.
 Automatic fan controller that maintains a target temperature using a PID algorithm.
 
 ```bash
-# Usage: sudo ./pid_control/fan-pid-control.py <min_speed%> <max_speed%> <target_temp°C>
+# Usage: sudo ./pid_control/fan-pid-control.py [-t] [-i interval] <min_speed%> <max_speed%> <target_temp°C>
 
 # Example: Maintain 70°C with fan speeds between 30-100%
 sudo ./pid_control/fan-pid-control.py 30 100 70
+
+# Example with custom update interval (2 Hz = 0.5 second interval)
+sudo ./pid_control/fan-pid-control.py -i 0.5 30 100 70
 ```
 
 **Features:**
-- Runs continuously (1 Hz update rate)
+- Runs continuously (default 1 Hz, configurable with `-i` flag)
 - PID controller automatically adjusts fan speeds
 - Sets both CPU and GPU fans to same speed
 - Graceful shutdown on Ctrl+C (returns to auto mode)
@@ -43,27 +46,30 @@ PID Fan Controller
 ======================================================================
 Target temperature: 70°C
 Fan speed range: 30% - 100%
-PID parameters: Kp=3.0, Ki=0.2, Kd=1.0
+Update interval: 1.0s (1.0 Hz)
+PID parameters: Kp=3.0, Ki=0.0, Kd=0.0, Kt=5.0
 
 Press Ctrl+C to stop and return to automatic control
 ======================================================================
 
-[   1] Temp:  66.0°C | Target: 70.0°C | Error: -4.0°C | Fan:  30.0% | P:-12.00 I: -0.80 D: -4.00
-[   2] Temp:  65.0°C | Target: 70.0°C | Error: -5.0°C | Fan:  30.0% | P:-15.00 I: -1.80 D: -1.00
-[   3] Temp:  67.0°C | Target: 70.0°C | Error: -3.0°C | Fan:  30.0% | P: -9.00 I: -2.40 D: +2.00
+[   1] Temp:  66.0°C | Target: 70.0°C | Error: -4.0°C | Fan:  30.0% | P:-12.00 I:+0.00 D:+0.00 T:+0.00
+[   2] Temp:  68.0°C | Target: 70.0°C | Error: -2.0°C | Fan:  46.0% | P: -6.00 I:+0.00 D:+0.00 T:+10.00
+[   3] Temp:  70.0°C | Target: 70.0°C | Error: +0.0°C | Fan:  40.0% | P: +0.00 I:+0.00 D:+0.00 T:+10.00
 ```
 
 **PID Parameters:**
 - **Kp (Proportional)**: 3.0 - Increase fan 3% per degree above target
-- **Ki (Integral)**: 0.2 - Eliminate steady-state error
-- **Kd (Derivative)**: 1.0 - Dampen oscillations
+- **Ki (Integral)**: 0.0 - Disabled (no steady-state correction needed)
+- **Kd (Derivative)**: 0.0 - Disabled (redundant with Kt)
+- **Kt (Temperature derivative)**: 5.0 - Immediate response to temperature changes
 
-These can be adjusted in the script if needed.
+These can be adjusted in `pid_control/config.py` if needed.
 
-**How PID works:**
+**How the controller works:**
 - **P term**: Reacts to current error (temp - target)
-- **I term**: Eliminates persistent offset
-- **D term**: Reduces overshoot and oscillation
+- **I term**: Disabled (set to 0)
+- **D term**: Disabled (set to 0)
+- **T term**: Responds to rate of temperature change (°C/s) for immediate reaction
 
 **Safety:**
 - Enforces min/max fan speed limits
@@ -172,22 +178,26 @@ sudo systemctl start tccd
 
 ### PID controller oscillates
 - Reduce Kp (proportional gain)
-- Increase Kd (derivative gain)
+- Reduce Kt (temperature derivative gain)
 - Adjust target temperature closer to natural idle
 
 ### Fans too aggressive
 - Lower max_speed parameter
 - Reduce Kp gain
+- Reduce Kt gain
 - Increase target temperature
 
 ### Fans too slow to respond
 - Increase Kp gain
-- Increase Ki gain
+- Increase Kt gain
 - Lower min_speed to allow more range
 
 ### Temperature overshoots
-- Increase Kd (derivative gain)
+- Reduce Kt (temperature derivative gain)
 - Reduce Kp gain
+
+### Steady-state error (temp settles away from target)
+- Enable Ki (integral gain) by setting it to 0.1-0.5 in config.py
 
 ## License
 

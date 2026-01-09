@@ -15,12 +15,13 @@ This script maintains a target CPU temperature by automatically adjusting fan sp
 ## Usage
 
 ```bash
-sudo ./fan-pid-control.py [-t] <min_speed> <max_speed> <target_temp>
+sudo ./fan-pid-control.py [-t] [-i interval] <min_speed> <max_speed> <target_temp>
 ```
 
 ### Arguments
 
 - `-t` - **Test mode**: Calculate and display fan speeds without actually setting them
+- `-i interval` - **Update interval** in seconds (0.1-10.0, default: 1.0)
 - `min_speed` - Minimum fan speed percentage (0-100)
 - `max_speed` - Maximum fan speed percentage (0-100)
 - `target_temp` - Target CPU temperature in Celsius (20-95)
@@ -42,13 +43,20 @@ sudo ./fan-pid-control.py 40 100 65
 
 # Balanced (default recommendation)
 sudo ./fan-pid-control.py 30 100 70
+
+# Fast updates (2 Hz)
+sudo ./fan-pid-control.py -i 0.5 30 100 70
+
+# Slow updates (0.5 Hz)
+sudo ./fan-pid-control.py -i 2.0 30 100 70
 ```
 
 ## Output Format
 
 ```
-[TEST] [   1] Temp:  62.0°C | Target: 70.0°C | Error:  -8.0°C | Fan:  30.0% | P:-24.00 I: -0.17 D: +0.00
-[LIVE] [   2] Temp:  63.0°C | Target: 70.0°C | Error:  -7.0°C | Fan:  30.0% | P:-21.00 I: -0.35 D: +1.00
+[TEST] [   1] Temp:  62.0°C | Target: 70.0°C | Error:  -8.0°C | Fan:  30.0% | P:-24.00 I:+0.00 D:+0.00 T:+0.00
+[LIVE] [   2] Temp:  68.0°C | Target: 70.0°C | Error:  -2.0°C | Fan:  46.0% | P: -6.00 I:+0.00 D:+0.00 T:+10.00
+[LIVE] [   3] Temp:  70.0°C | Target: 70.0°C | Error:  +0.0°C | Fan:  40.0% | P: +0.00 I:+0.00 D:+0.00 T:+10.00
 ```
 
 ### Fields
@@ -58,14 +66,15 @@ sudo ./fan-pid-control.py 30 100 70
 - **Temp** - Current CPU temperature (from temp2 sensor)
 - **Target** - Desired temperature
 - **Error** - Current minus target (positive = too hot, negative = too cold)
-- **Fan** - Commanded fan speed percentage (this is the output)
-- **P** - Proportional term contribution
-- **I** - Integral term contribution
-- **D** - Derivative term contribution
+- **Fan** - Commanded fan speed percentage (sum of P+I+D+T, clamped to min/max)
+- **P** - Proportional term contribution (percentage points)
+- **I** - Integral term contribution (percentage points, currently disabled)
+- **D** - Derivative term contribution (percentage points, currently disabled)
+- **T** - Temperature derivative term contribution (percentage points)
 
 ## PID Algorithm
 
-The controller uses three terms to calculate fan speed:
+The controller uses four terms to calculate fan speed:
 
 ### P (Proportional) Term
 - **Kp = 3.0**
@@ -73,21 +82,33 @@ The controller uses three terms to calculate fan speed:
 - Example: If 5°C too hot, adds 15% fan speed (3.0 × 5)
 
 ### I (Integral) Term
-- **Ki = 0.2**
+- **Ki = 0.0 (disabled)**
 - Eliminates steady-state error over time
-- Accumulates error to ensure target is reached
-- Has anti-windup protection to prevent overshooting
+- Currently disabled as the P+T control reaches target accurately
+- Has anti-windup protection to prevent overshooting if enabled
 
 ### D (Derivative) Term
-- **Kd = 1.0**
+- **Kd = 0.0 (disabled)**
 - Dampens oscillations by predicting future error
-- Looks at rate of temperature change
-- Skipped on first iteration to avoid garbage values
+- Currently disabled as it's mathematically equivalent to the T term
+- Would calculate d(error)/dt = d(temp - target)/dt = d(temp)/dt
+
+### T (Temperature Derivative) Term
+- **Kt = 5.0**
+- Responds immediately to rate of temperature change
+- Example: If temp rising at 2°C/s, adds 10% fan speed (5.0 × 2)
+- Provides feedforward control independent of error sign
+- Mathematically equivalent to D term but clearer semantics
 
 ### Formula
 
 ```
-output = (Kp × error) + (Ki × ∫error dt) + (Kd × d(error)/dt)
+output = (Kp × error) + (Ki × ∫error dt) + (Kd × d(error)/dt) + (Kt × d(temp)/dt)
+```
+
+Currently simplified to:
+```
+output = (Kp × error) + (Kt × d(temp)/dt)
 ```
 
 Then clamped to [min_speed, max_speed] range.
@@ -103,30 +124,36 @@ Then clamped to [min_speed, max_speed] range.
 
 ## Tuning
 
-If the default PID parameters don't work well for your use case, edit the script:
+If the default parameters don't work well for your use case, edit `config.py`:
 
 ```python
-kp = 3.0   # Proportional gain
-ki = 0.2   # Integral gain
-kd = 1.0   # Derivative gain
+KP = 3.0   # Proportional gain
+KI = 0.0   # Integral gain (disabled)
+KD = 0.0   # Derivative gain (disabled)
+KT = 5.0   # Temperature derivative gain
 ```
 
 ### Tuning Guidelines
 
 **Temperature oscillates:**
-- Decrease Kp (less aggressive)
-- Increase Kd (more damping)
+- Decrease Kp (less aggressive response to error)
+- Decrease Kt (less aggressive response to rate changes)
 
 **Too slow to respond:**
 - Increase Kp (more aggressive)
-- Increase Ki (faster correction)
+- Increase Kt (faster response to temperature changes)
 
 **Overshoots target:**
-- Increase Kd (more damping)
-- Decrease Kp (less aggressive)
+- Decrease Kt (less aggressive on rate changes)
+- Decrease Kp (less aggressive on error)
 
-**Steady-state offset:**
-- Increase Ki (stronger long-term correction)
+**Steady-state offset (temp settles away from target):**
+- Enable Ki by setting it to 0.1-0.5 (adds long-term correction)
+- This is rarely needed with PT control
+
+**Fans too noisy/aggressive:**
+- Reduce Kt (main contributor to fan speed changes)
+- Increase update interval with `-i` flag (e.g., `-i 2.0` for slower updates)
 
 ## Stopping
 
