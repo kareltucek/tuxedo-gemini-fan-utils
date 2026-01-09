@@ -23,6 +23,11 @@ class PIDConfig:
     # Default: 1.0 provides moderate damping
     KD = 1.0
 
+    # Kt: Temperature derivative gain - responds to rate of temperature change
+    # This makes the controller react immediately to temperature changes
+    # Default: 5.0 means increase fan 5% per degree/second temperature rise
+    KT = 5.0
+
 
 class ValidationConfig:
     """Input validation limits"""

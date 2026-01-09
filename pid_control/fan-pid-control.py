@@ -88,7 +88,7 @@ def print_header(test_mode, min_speed_pct, max_speed_pct, target_temp):
     print("=" * 70)
     print(f"Target temperature: {target_temp}°C")
     print(f"Fan speed range: {min_speed_pct}% - {max_speed_pct}%")
-    print(f"PID parameters: Kp={PIDConfig.KP}, Ki={PIDConfig.KI}, Kd={PIDConfig.KD}")
+    print(f"PID parameters: Kp={PIDConfig.KP}, Ki={PIDConfig.KI}, Kd={PIDConfig.KD}, Kt={PIDConfig.KT}")
     if test_mode:
         print("\n*** TEST MODE: Speeds will be calculated but NOT applied ***")
     print()
@@ -120,7 +120,7 @@ def control_loop(fan_ctrl, pid, target_temp, test_mode):
         current_temp = temp2  # temp2 is generally more reliable
 
         # Compute PID output
-        fan_speed_pct, p_term, i_term, d_term = pid.compute(target_temp, current_temp, dt)
+        fan_speed_pct, p_term, i_term, d_term, t_term = pid.compute(target_temp, current_temp, dt)
 
         # Set both fans to same speed
         fan_ctrl.set_fan_speed(0, fan_speed_pct)  # CPU fan
@@ -134,7 +134,7 @@ def control_loop(fan_ctrl, pid, target_temp, test_mode):
               f"Target: {target_temp:.1f}°C | "
               f"Error: {error:+5.1f}°C | "
               f"Fan: {fan_speed_pct:5.1f}% | "
-              f"P:{p_term:+6.2f} I:{i_term:+6.2f} D:{d_term:+6.2f}")
+              f"P:{p_term:+6.2f} I:{i_term:+6.2f} D:{d_term:+6.2f} T:{t_term:+6.2f}")
 
         # Sleep until next iteration
         time.sleep(ValidationConfig.UPDATE_INTERVAL)
@@ -156,6 +156,7 @@ def main():
         PIDConfig.KP,
         PIDConfig.KI,
         PIDConfig.KD,
+        PIDConfig.KT,
         min_speed_pct,
         max_speed_pct
     )
