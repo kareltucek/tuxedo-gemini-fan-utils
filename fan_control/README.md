@@ -1,20 +1,20 @@
-# Tuxedo Gemini Gen2 Fan Control Utilities
+# Tuxedo Gemini Gen2 Fan Control
 
-Direct fan control for Tuxedo Gemini Gen2 laptops (and other Uniwill-based Tuxedo devices) using the `/dev/tuxedo_io` WMI interface.
+Simple fan control utility for Tuxedo Gemini Gen2 laptops using the Clevo interface via `/dev/tuxedo_io`.
 
 ## Requirements
 
 - Tuxedo laptop with `tuxedo_io` kernel module loaded
-- Python 3.x
+- GCC compiler
 - Root privileges
 
 ## Installation
 
 ```bash
-# Make the script executable
-chmod +x fan_control.py
+# Build the utility
+make
 
-# Check if tuxedo_io module is loaded
+# Check that tuxedo_io module is loaded
 lsmod | grep tuxedo_io
 
 # Verify device exists
@@ -26,103 +26,88 @@ ls -l /dev/tuxedo_io
 ### Show Current Fan Status
 
 ```bash
-sudo ./fan_control.py status
+sudo ./fanctl status
 ```
 
 Output example:
 ```
 === Tuxedo Fan Status ===
 
-Hardware minimum speed: 0%
-Fans can turn off: Yes
-
 Fan 0 (CPU):
-  Temperature: 45°C
-  Speed: 35.0%
+  Speed: 35.3% (raw: 90/255)
+  Temp1: 52°C
+  Temp2: 66°C
 
 Fan 1 (GPU):
-  Temperature: 42°C
-  Speed: 30.0%
+  Speed: 35.3% (raw: 90/255)
+  Temp1: 56°C
+  Temp2: 57°C
 ```
 
 ### Set Fan Speed Manually
 
 ```bash
 # Set CPU fan (fan 0) to 50%
-sudo ./fan_control.py set 0 50
+sudo ./fanctl set 0 50
 
 # Set GPU fan (fan 1) to 75%
-sudo ./fan_control.py set 1 75
+sudo ./fanctl set 1 75
 ```
+
+**Fan numbers:**
+- `0` = CPU fan
+- `1` = GPU fan
+
+**Note:** The Clevo interface requires setting all fans together, so the utility reads current speeds for other fans before making changes.
 
 ### Return to Automatic Control
 
 ```bash
-sudo ./fan_control.py auto
+sudo ./fanctl auto
 ```
 
 This returns control to the BIOS automatic fan management.
 
 ## How It Works
 
-### ioctl() System Calls
+### Clevo Interface via ioctl()
 
-Unlike simple character devices that use `read()/write()`, `/dev/tuxedo_io` uses **ioctl()** (input/output control) for sending commands to the kernel driver.
+The Gemini Gen2 uses the **Clevo interface** (not Uniwill) which is accessed through ioctl system calls to `/dev/tuxedo_io`.
 
-Each ioctl call consists of:
-- **Command code**: Tells the driver what operation to perform
-- **Data parameter**: Input/output data for the command
+**Key ioctl commands:**
 
-Example:
-```python
-# Read fan temperature
-temp = ioctl(device, R_UW_FAN_TEMP, buffer)
+- `R_CL_FANINFO1` (0xED01 + 0x10) - Read fan 1 info
+- `R_CL_FANINFO2` (0xED01 + 0x11) - Read fan 2 info
+- `W_CL_FANSPEED` (0xED02 + 0x10) - Set all fan speeds
+- `W_CL_FANAUTO` (0xED02 + 0x11) - Return to auto mode
 
-# Set fan speed to 50%
-ioctl(device, W_UW_FANSPEED, 100)  # 100/200 = 50%
-```
+### Fan Info Format
 
-### Uniwill Interface Commands
+Each `FANINFO` ioctl returns a 32-bit value:
+- **Bits 0-7**: Fan speed (0-255)
+- **Bits 8-15**: Temperature sensor 1 (°C)
+- **Bits 16-23**: Temperature sensor 2 (°C)
 
-The Gemini Gen2 uses the Uniwill ODM interface with these ioctl commands:
+Temperature sensor 2 is generally more reliable.
 
-**Read Operations:**
-- `R_UW_FAN_TEMP` / `R_UW_FAN_TEMP2` - Read temperature in °C
-- `R_UW_FANSPEED` / `R_UW_FANSPEED2` - Read raw speed (0-200)
-- `R_UW_FANS_MIN_SPEED` - Get hardware minimum speed
-- `R_UW_FANS_OFF_AVAILABLE` - Check if fans can turn off
+### Setting Fan Speeds
 
-**Write Operations:**
-- `W_UW_FANSPEED` / `W_UW_FANSPEED2` - Set speed (0-200 scale)
-- `W_UW_FANAUTO` - Return to automatic BIOS control
+The `W_CL_FANSPEED` ioctl requires all fan speeds in one call:
+- **Bits 0-7**: Fan 0 speed (0-255)
+- **Bits 8-15**: Fan 1 speed (0-255)
+- **Bits 16-23**: Fan 2 speed (0-255)
 
-### Speed Scale
+This is why changing one fan requires reading the others first.
 
-Uniwill devices use a **0-200 scale** for fan speeds:
-- 0 = 0% (fan off)
-- 100 = 50%
-- 200 = 100%
+## Why Not Python?
 
-The utility automatically converts to/from percentages for convenience.
-
-## Why Can't I Use Standard Linux Tools?
-
-Standard tools like `lm-sensors`, `pwmconfig`, and `fancontrol` expect fans to be exposed via the **hwmon** (hardware monitoring) subsystem in sysfs at paths like:
-
-```
-/sys/class/hwmon/hwmon*/pwm*        # PWM control
-/sys/class/hwmon/hwmon*/fan*_input  # Fan speed readings
-```
-
-The Gemini Gen2 **doesn't expose fans via hwmon**. Instead, it uses a proprietary WMI (Windows Management Instrumentation) interface accessible only through `/dev/tuxedo_io` with ioctl commands.
-
-This is why you need device-specific utilities like this one or the full `tccd` daemon.
+Initial Python implementations using `fcntl.ioctl()` returned zeros or didn't work reliably. The C implementation using `sys/ioctl.h` works correctly with the kernel driver.
 
 ## Architecture
 
 ```
 User Space:
-  fan_control.py (this utility)
+  fanctl (this utility)
          |
          | ioctl() system calls
          v
@@ -130,10 +115,10 @@ Kernel Space:
   /dev/tuxedo_io character device
          |
          v
-  tuxedo_io kernel module
+  tuxedo_io kernel module (clevo_acpi interface)
          |
          v
-  WMI/ACPI firmware interface
+  ACPI/WMI firmware interface
          |
          v
 Hardware:
@@ -145,16 +130,48 @@ Hardware:
 
 ## Safety Notes
 
-- Always use `auto` command to return to automatic control when done
 - The BIOS/EC has built-in thermal protection
 - Setting fans too low may cause thermal throttling
+- Always return to auto mode when done: `sudo ./fanctl auto`
 - The system will override dangerously low fan speeds
+
+## Files
+
+- `fanctl.c` - Main fan control utility
+- `Makefile` - Build configuration
+
+## Building
+
+```bash
+# Build
+make
+
+# Clean compiled files
+make clean
+```
+
+## Troubleshooting
+
+### "Failed to open /dev/tuxedo_io"
+- Make sure you're running as root (`sudo`)
+- Check if tuxedo_io module is loaded: `lsmod | grep tuxedo_io`
+- Load module if needed: `sudo modprobe tuxedo_io`
+
+### Fans not responding
+- Make sure tccd is not running: `sudo systemctl stop tccd`
+- tccd will compete for control of the fans
+- Restart tccd when done: `sudo systemctl start tccd`
+
+### Reading zeros or no change
+- The EC may be in auto mode
+- Some operations require specific initialization
+- Try `sudo ./fanctl auto` then set speeds again
 
 ## References
 
-- `/opt/tcc2/src/native-lib/tuxedo_io_lib/tuxedo_io_ioctl.h` - ioctl command definitions
-- `/opt/tcc2/src/native-lib/tuxedo_io_lib/tuxedo_io_api.hh` - C++ API reference
-- `/dev/tuxedo_io` - Kernel device interface
+- `/usr/src/tuxedo-drivers-*/tuxedo_io/tuxedo_io_ioctl.h` - ioctl definitions
+- `/opt/tcc2/src/native-lib/tuxedo_io_lib/` - TCC implementation
+- Tuxedo Drivers: https://github.com/tuxedocomputers/tuxedo-drivers
 
 ## License
 
@@ -162,4 +179,4 @@ GPLv3 - Same as tuxedo-control-center
 
 ## Author
 
-Created for Tuxedo Gemini Gen2 fan control investigation
+Created for Tuxedo Gemini Gen2 fan control
