@@ -1,12 +1,30 @@
-# Tuxedo Gemini Gen2 Fan Control Utilities
+# Goal
 
-Fan control utilities for Tuxedo Gemini Gen2 laptops.
+Quiet development laptop.
+
+# Why
+
+Because the default tuxedo/intel power and cooling management stack is just unsatisfactory - loud, inefficient, providing unsatisfactory cpu performance for blocking tasks (like compilation - these are often limited by singlethread work) while often unexpectedly driving fans into sudden vacuum-cleaner spikes just because of background tasks that could happily run at efficient cores (like codebase indexing).
+
+# What
+
+- Direct fan control utility.
+- PID-based automatic fan controller to maintain target temperature at a pre-defined fan speed range.
+- Cpu profile that provides good performance/efficiency tradeoff at a limited TPU. 
 
 ## Tools
 
-### 1. fanctl - Manual Fan Control
+### 1. run.sh - Default do-all-for-me script
 
-Located in `fan_control/fanctl.c` - Simple utility for manual fan control.
+This script:
+
+- disables tccd (tuxedo-control-center daemon) for this session to prevent it fighting over cpu profiles and fan speeds
+- sets the quiet4 cpu profile.
+- starts the PID fan speed controller.
+
+### 2. fanctl - Manual Fan Control
+
+Located in `fan_control/fanctl.c` - Simple utility that allows reading and setting fan speeds directly without tccd.
 
 ```bash
 cd fan_control
@@ -18,7 +36,27 @@ sudo ./fanctl auto        # Return to automatic control
 
 See `fan_control/README.md` for detailed documentation.
 
-### 2. fan-pid-control.py - PID Temperature Controller
+### 3. power_profile.sh - CPU Power Profile Script
+
+Located in `cpu_profile/power_profile.sh` - Configures reasonable CPU power profiles to address the unsatisfactory default tuxedo/intel power management. 
+
+The suggested profile is quiet4, which sets:
+- 4 performance cores to run at 3.2Ghz - for tasks that are blocked by single-thread performance - this is the highest frequency that works with a reasonable work-done/power ratio.
+- 16 efficiency cores to run at 1.2Ghz - to provide multithreaded performance with very good work/power ratio.
+
+```bash
+cd cpu_profile
+sudo ./power_profile.sh status       # Show current CPU configuration
+sudo ./power_profile.sh quiet1       # 2 P-cores at 4000 MHz, 16 E-cores at 1200 MHz
+sudo ./power_profile.sh quiet4       # 4 P-cores at 3200 MHz, 16 E-cores at 1200 MHz
+sudo ./power_profile.sh quiet8       # 8 P-cores at 1600 MHz, 16 E-cores at 1200 MHz
+sudo ./power_profile.sh performance  # All cores at maximum frequency
+sudo ./power_profile.sh powersave    # All cores at minimum frequency
+```
+
+_Here ends the human-produced text. Rest is machine-generated._
+
+### 4. fan-pid-control.py - PID Temperature Controller
 
 Automatic fan controller that maintains a target temperature using a PID algorithm.
 
