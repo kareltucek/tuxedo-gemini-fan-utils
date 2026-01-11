@@ -30,6 +30,8 @@ class PIDController:
         self.prev_error = 0.0
         self.prev_temp = None
         self.integral = 0.0
+        self.prev_t_term = 0.0  # Track T term for decay when temp unchanged
+        self.time_since_temp_change = 0.0  # Accumulate time since temp last changed
 
     def compute(self, setpoint, current_value, dt):
         """
@@ -70,16 +72,30 @@ class PIDController:
 
         # Temperature derivative term - responds to rate of temperature change
         # This provides immediate response to temperature changes regardless of position relative to setpoint
-        if self.prev_temp is not None and dt > 0.1:
-            temp_rate = (current_value - self.prev_temp) / dt
-            # Positive temp_rate (rising temp) increases fan speed
-            t_term = self.kt * temp_rate
+        if self.prev_temp is not None:
+            # Check if temperature has actually changed
+            if current_value != self.prev_temp:
+                # Temperature changed - use accumulated time since last change
+                self.time_since_temp_change += dt
+                if self.time_since_temp_change > 0.1:  # Skip if too small
+                    temp_rate = (current_value - self.prev_temp) / self.time_since_temp_change
+                    t_term = self.kt * temp_rate
+                    self.time_since_temp_change = 0.0  # Reset accumulator
+                else:
+                    t_term = 0
+            else:
+                # Temperature unchanged - accumulate time and decay previous T term
+                self.time_since_temp_change += dt
+                # Exponential decay: reduce by 20% per second
+                decay_factor = 0.8 ** dt
+                t_term = self.prev_t_term * decay_factor
         else:
             t_term = 0
 
         # Save state for next iteration
         self.prev_error = error
         self.prev_temp = current_value
+        self.prev_t_term = t_term
 
         # Calculate output
         output = p_term + i_term + d_term + t_term
@@ -97,3 +113,5 @@ class PIDController:
         self.prev_error = 0.0
         self.prev_temp = None
         self.integral = 0.0
+        self.prev_t_term = 0.0
+        self.time_since_temp_change = 0.0
