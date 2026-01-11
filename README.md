@@ -1,16 +1,21 @@
 # Goal
 
-Quiet development laptop.
-
-# Why
-
-Because the default tuxedo/intel power and cooling management stack is just unsatisfactory - loud, inefficient, providing unsatisfactory cpu performance for blocking tasks (like compilation - these are often limited by singlethread work) while often unexpectedly driving fans into sudden vacuum-cleaner spikes just because of background tasks that could happily run at efficient cores (like codebase indexing).
+Quiet laptop for software development.
 
 # What
 
 - Direct fan control utility.
 - PID-based automatic fan controller to maintain target temperature at a pre-defined fan speed range.
 - Cpu profile that provides good performance/efficiency tradeoff at a limited TPU. 
+
+# Why
+
+Because the default tuxedo/intel power and cooling management stack is just unsatisfactory - loud, inefficient, providing unsatisfactory cpu performance for blocking tasks (like compilation - these are often limited by singlethread work) while often unexpectedly driving fans into sudden vacuum-cleaner spikes just because of background tasks that could happily run at efficient cores (like codebase indexing).
+
+# How 
+
+- maintain 70°C temperature with fans speeds limited to 10% - 30% range.
+- use 4 performance cores at 3.2Ghz and 16 efficiency cores at 1.2Ghz cpu profile to do the required work fast, yet at a bounded TPU.
 
 ## Tools
 
@@ -63,11 +68,11 @@ Automatic fan controller that maintains a target temperature using a PID algorit
 ```bash
 # Usage: sudo ./pid_control/fan-pid-control.py [-t] [-i interval] <min_speed%> <max_speed%> <target_temp°C>
 
-# Example: Maintain 70°C with fan speeds between 30-100%
-sudo ./pid_control/fan-pid-control.py 30 100 70
+# Example: Maintain 70°C with fan speeds between 10-30%
+sudo ./pid_control/fan-pid-control.py 10 30 70
 
 # Example with custom update interval (2 Hz = 0.5 second interval)
-sudo ./pid_control/fan-pid-control.py -i 0.5 30 100 70
+sudo ./pid_control/fan-pid-control.py -i 0.5 10 30 70
 ```
 
 **Features:**
