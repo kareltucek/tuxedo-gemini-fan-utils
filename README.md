@@ -1,18 +1,18 @@
-# Goal
+## Goal
 
 Quiet laptop for software development.
 
-# What
+## What
 
 - Direct fan control utility.
 - PID-based automatic fan controller to maintain target temperature at a pre-defined fan speed range.
 - Cpu profile that provides good performance/efficiency tradeoff at a limited TPU. 
 
-# Why
+## Why
 
 Because the default tuxedo/intel power and cooling management stack is just unsatisfactory - loud, inefficient, providing unsatisfactory cpu performance for blocking tasks (like compilation - these are often limited by singlethread work) while often unexpectedly driving fans into sudden vacuum-cleaner spikes just because of background tasks that could happily run at efficient cores (like codebase indexing).
 
-# How 
+## How 
 
 - maintain 70°C temperature with fans speeds limited to 10% - 30% range.
 - use 4 performance cores at 3.2Ghz and 16 efficiency cores at 1.2Ghz cpu profile to do the required work fast, yet at a bounded TPU.
