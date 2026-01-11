@@ -55,10 +55,13 @@ class PIDController:
         p_term = self.kp * error
 
         # Integral term (with anti-windup)
-        self.integral += error * dt
-        # Clamp integral to prevent windup
+        # Only accumulate positive error (temp above target) for cooling control
+        # We don't want to reduce fan speed when temp is below target
+        if error > 0:
+            self.integral += error * dt
+        # Clamp integral to prevent windup (non-negative for cooling)
         max_integral = (self.max_output - self.min_output) / self.ki if self.ki != 0 else 1000
-        self.integral = max(-max_integral, min(max_integral, self.integral))
+        self.integral = max(0, min(max_integral, self.integral))
         i_term = self.ki * self.integral
 
         # Derivative term on error (skip on first iteration when dt is tiny)
