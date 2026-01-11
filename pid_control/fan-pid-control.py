@@ -6,24 +6,27 @@ Maintains target temperature using a PID (Proportional-Integral-Derivative) cont
 Runs continuously, adjusting fan speeds at specified interval.
 
 Usage:
-    sudo ./fan-pid-control.py [-t] [-i interval] <min_speed> <max_speed> <target_temp>
+    sudo ./fan-pid-control.py [-t] [-i interval] [min_speed max_speed target_temp]
 
 Arguments:
     -t              - Test mode (print suggested speeds without setting them)
-    -i interval     - Update interval in seconds (default: 1.0)
-    min_speed       - Minimum fan speed percentage (0-100)
-    max_speed       - Maximum fan speed percentage (0-100)
-    target_temp     - Target CPU temperature in Celsius
+    -i interval     - Update interval in seconds (default: from ControlConfig)
+    min_speed       - Minimum fan speed percentage (optional, default: from ControlConfig)
+    max_speed       - Maximum fan speed percentage (optional, default: from ControlConfig)
+    target_temp     - Target CPU temperature in Celsius (optional, default: from ControlConfig)
 
 Example:
+    sudo ./fan-pid-control.py
+    # Uses defaults from ControlConfig
+
     sudo ./fan-pid-control.py 30 100 70
-    # Maintains CPU at 70°C, fan speed between 30-100%, 1 Hz updates
+    # Maintains CPU at 70°C, fan speed between 30-100%
 
     sudo ./fan-pid-control.py -i 0.5 30 100 70
-    # Same but with 2 Hz updates (0.5 second interval)
+    # Same but with custom update interval (0.5 second)
 
-    sudo ./fan-pid-control.py -t 30 100 70
-    # Test mode: shows what speeds would be set without actually setting them
+    sudo ./fan-pid-control.py -t
+    # Test mode with defaults: shows what speeds would be set without actually setting them
 """
 
 import sys
@@ -33,7 +36,9 @@ import os
 
 from pid_controller import PIDController
 from fan_controller import FanController
-from config import PIDConfig, ValidationConfig, validate_arguments
+from fanctl_temp_reader import FanctlTempReader
+from coretemp_reader import CoretempReader
+from config import PIDConfig, ControlConfig, ValidationConfig, validate_arguments
 
 
 def parse_arguments():
@@ -44,7 +49,7 @@ def parse_arguments():
         Tuple of (test_mode, interval, min_speed_pct, max_speed_pct, target_temp)
     """
     test_mode = False
-    interval = 1.0  # Default 1 second
+    interval = ControlConfig.UPDATE_INTERVAL
     args = sys.argv[1:]
 
     # Check for test mode flag
@@ -68,23 +73,31 @@ def parse_arguments():
             sys.exit(1)
         args = args[2:]
 
-    if len(args) != 3:
-        print(__doc__)
-        sys.exit(1)
+    # Parse control parameters (optional)
+    if len(args) == 0:
+        # Use defaults from ControlConfig
+        min_speed_pct = ControlConfig.MIN_SPEED
+        max_speed_pct = ControlConfig.MAX_SPEED
+        target_temp = ControlConfig.TARGET_TEMP
+    elif len(args) == 3:
+        # Use provided values
+        try:
+            min_speed_pct = float(args[0])
+            max_speed_pct = float(args[1])
+            target_temp = float(args[2])
+        except ValueError:
+            print("ERROR: All arguments must be numbers", file=sys.stderr)
+            print(__doc__)
+            sys.exit(1)
 
-    try:
-        min_speed_pct = float(args[0])
-        max_speed_pct = float(args[1])
-        target_temp = float(args[2])
-    except ValueError:
-        print("ERROR: All arguments must be numbers", file=sys.stderr)
+        # Validate arguments
+        is_valid, error_msg = validate_arguments(min_speed_pct, max_speed_pct, target_temp)
+        if not is_valid:
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print("ERROR: Provide either 0 or 3 control parameters (min_speed, max_speed, target_temp)", file=sys.stderr)
         print(__doc__)
-        sys.exit(1)
-
-    # Validate arguments
-    is_valid, error_msg = validate_arguments(min_speed_pct, max_speed_pct, target_temp)
-    if not is_valid:
-        print(f"ERROR: {error_msg}", file=sys.stderr)
         sys.exit(1)
 
     return test_mode, interval, min_speed_pct, max_speed_pct, target_temp
@@ -119,12 +132,13 @@ def print_header(test_mode, interval, min_speed_pct, max_speed_pct, target_temp)
     print()
 
 
-def control_loop(fan_ctrl, pid, target_temp, interval, test_mode):
+def control_loop(fan_ctrl, read_temp_fn, pid, target_temp, interval, test_mode):
     """
     Main control loop
 
     Args:
         fan_ctrl: FanController instance
+        read_temp_fn: Function that returns (combined_temp, cpu_package_temp, fanctl_max_temp)
         pid: PIDController instance
         target_temp: Target temperature
         interval: Update interval in seconds
@@ -138,9 +152,8 @@ def control_loop(fan_ctrl, pid, target_temp, interval, test_mode):
         dt = current_time - last_time
         last_time = current_time
 
-        # Read CPU temperature (fan 0 = CPU)
-        current_speed_pct, temp1, temp2 = fan_ctrl.read_fan_info(0)
-        current_temp = temp2  # temp2 is generally more reliable
+        # Read combined temperature
+        current_temp, cpu_package_temp, fanctl_max_temp = read_temp_fn()
 
         # Compute PID output (handles temp change detection and D term decay internally)
         fan_speed_pct, p_term, i_term, d_term = pid.compute(target_temp, current_temp, dt)
@@ -153,7 +166,7 @@ def control_loop(fan_ctrl, pid, target_temp, interval, test_mode):
         iteration += 1
         error = current_temp - target_temp
         mode_indicator = "[TEST]" if test_mode else "[LIVE]"
-        print(f"{mode_indicator} [{iteration:4d}] Temp: {current_temp:5.1f}°C | "
+        print(f"{mode_indicator} [{iteration:4d}] Temp: {current_temp:5.1f}°C (pkg:{cpu_package_temp:5.1f} fan:{fanctl_max_temp:5.1f}) | "
               f"Target: {target_temp:.1f}°C | "
               f"Error: {error:+5.1f}°C | "
               f"Fan: {fan_speed_pct:5.1f}% | "
@@ -173,6 +186,17 @@ def main():
 
     # Initialize hardware interface
     fan_ctrl = FanController(fanctl_path, test_mode=test_mode)
+
+    # Initialize temperature readers
+    fanctl_temp = FanctlTempReader(fanctl_path)
+    coretemp = CoretempReader()
+
+    # Create temperature reading function (combines both sources)
+    def read_temp():
+        cpu_package_temp = coretemp.read_temperature()
+        fanctl_max_temp = fanctl_temp.read_max_temperature()
+        combined_temp = (cpu_package_temp + fanctl_max_temp) / 2.0
+        return combined_temp, cpu_package_temp, fanctl_max_temp
 
     # Initialize PID controller
     pid = PIDController(
@@ -203,7 +227,7 @@ def main():
 
     # Run control loop
     try:
-        control_loop(fan_ctrl, pid, target_temp, interval, test_mode)
+        control_loop(fan_ctrl, read_temp, pid, target_temp, interval, test_mode)
     except KeyboardInterrupt:
         cleanup()
     except Exception as e:

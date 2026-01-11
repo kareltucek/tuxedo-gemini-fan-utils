@@ -13,7 +13,7 @@ class PIDConfig:
 
     # Kp: Proportional gain - higher = more aggressive response to error
     # Default: 3.0 means increase fan speed by 3% per degree over target
-    KP = 3.0
+    KP = 1.0
 
     # Ki: Integral gain - higher = faster elimination of steady-state error
     # Default: 0.2 provides gradual correction of persistent offset
@@ -23,7 +23,45 @@ class PIDConfig:
     # Kd: Derivative gain - responds to rate of temperature change
     # Default: 5.0 means increase fan 5% per degree/second temperature rise
     # Provides immediate response when temperature is rising
-    KD = 5.0
+    KD = 10.0
+
+
+class ControlConfig:
+    """Default control parameters"""
+
+    # Fan speed range (percentage)
+    MIN_SPEED = 10
+    MAX_SPEED = 30
+
+    # Target temperature (Celsius)
+    TARGET_TEMP = 65
+
+    # Control loop update interval (seconds)
+    UPDATE_INTERVAL = 0.2
+
+
+class SmoothingConfig:
+    """Exponential smoothing configuration"""
+
+    # All smoothing uses exponential moving average with specified half-life
+    # Formula: alpha = 0.5^(dt/HALFLIFE)
+    # Larger half-life = more smoothing = slower response
+
+    # Coretemp package temperature smoothing (seconds)
+    # Smooths rapid CPU package temp fluctuations from coretemp sensor
+    CORETEMP_HALFLIFE = 1.0
+
+    # Fanctl temperature sensor smoothing (seconds)
+    # Smooths fanctl sensor readings (which update slowly ~1-2 Hz)
+    FANCTL_TEMP_HALFLIFE = 1.0
+
+    # D term smoothing (seconds)
+    # Smooths derivative term oscillations
+    D_TERM_HALFLIFE = 1.0
+
+    # Fan speed smoothing (seconds)
+    # Smooths fan speed commands to prevent rapid changes
+    FANSPEED_HALFLIFE = 4.0
 
 
 class ValidationConfig:
@@ -36,9 +74,6 @@ class ValidationConfig:
     # Fan speed range limits (percentage)
     MIN_SPEED = 0
     MAX_SPEED = 100
-
-    # Control loop update rate (seconds)
-    UPDATE_INTERVAL = 1.0
 
 
 def validate_arguments(min_speed_pct, max_speed_pct, target_temp):
