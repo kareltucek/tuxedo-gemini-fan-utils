@@ -4,7 +4,14 @@ Automatic temperature-based fan controller using PID algorithm for Tuxedo Gemini
 
 ## Overview
 
-This script maintains a target CPU temperature by automatically adjusting fan speeds using a PID (Proportional-Integral-Derivative) control algorithm. It runs continuously at 1 Hz and sets both CPU and GPU fans to the same speed.
+This script maintains a target CPU temperature by automatically adjusting fan speeds using a PID (Proportional-Integral-Derivative) control algorithm. It runs continuously at 2 Hz (0.5s intervals, configurable) and sets both CPU and GPU fans to the same speed.
+
+**Key features:**
+- Dual temperature sources (fast coretemp + slow fanctl sensors) for optimal response
+- Multi-level exponential smoothing to prevent oscillations
+- Conditional integration anti-windup
+- One-sided integral (cooling only)
+- Real-time status display with PID terms in both physical and percentage units
 
 ## Requirements
 
@@ -15,21 +22,29 @@ This script maintains a target CPU temperature by automatically adjusting fan sp
 ## Usage
 
 ```bash
-sudo ./fan-pid-control.py [-t] [-i interval] <min_speed> <max_speed> <target_temp>
+sudo ./fan-pid-control.py [-t] [-i interval] [min_speed max_speed target_temp]
 ```
 
 ### Arguments
 
 - `-t` - **Test mode**: Calculate and display fan speeds without actually setting them
-- `-i interval` - **Update interval** in seconds (0.1-10.0, default: 1.0)
-- `min_speed` - Minimum fan speed percentage (0-100)
-- `max_speed` - Maximum fan speed percentage (0-100)
-- `target_temp` - Target CPU temperature in Celsius (20-95)
+- `-i interval` - **Update interval** in seconds (0.1-10.0, default: from ControlConfig.UPDATE_INTERVAL)
+- `min_speed` - Minimum fan speed percentage (0-100, default: from ControlConfig.MIN_SPEED)
+- `max_speed` - Maximum fan speed percentage (0-100, default: from ControlConfig.MAX_SPEED)
+- `target_temp` - Target CPU temperature in Celsius (20-95, default: from ControlConfig.TARGET_TEMP)
+
+All three control parameters are optional. If omitted, defaults from `config.py` are used.
 
 ### Examples
 
 ```bash
+# Use defaults from config.py (10-30% range, 65°C target, 0.5s interval)
+sudo ./fan-pid-control.py
+
 # Test mode - see what it would do without actually controlling fans
+sudo ./fan-pid-control.py -t
+
+# Test mode with custom parameters
 sudo ./fan-pid-control.py -t 30 100 70
 
 # Live mode - actually control fans to maintain 70°C
@@ -41,40 +56,38 @@ sudo ./fan-pid-control.py 20 60 75
 # Gaming (aggressive cooling)
 sudo ./fan-pid-control.py 40 100 65
 
-# Balanced (default recommendation)
-sudo ./fan-pid-control.py 30 100 70
+# Fast updates (5 Hz = 0.2s interval)
+sudo ./fan-pid-control.py -i 0.2 30 100 70
 
-# Fast updates (2 Hz)
-sudo ./fan-pid-control.py -i 0.5 30 100 70
-
-# Slow updates (0.5 Hz)
-sudo ./fan-pid-control.py -i 2.0 30 100 70
+# Slow updates (1 Hz = 1.0s interval)
+sudo ./fan-pid-control.py -i 1.0 30 100 70
 ```
 
 ## Output Format
 
 ```
-[TEST] [   1] Temp:  62.0°C | Target: 70.0°C | Error:  -8.0°C | Fan:  30.0% | P:-24.00 I:+0.00 D:+0.00 T:+0.00
-[LIVE] [   2] Temp:  68.0°C | Target: 70.0°C | Error:  -2.0°C | Fan:  46.0% | P: -6.00 I:+0.00 D:+0.00 T:+10.00
-[LIVE] [   3] Temp:  70.0°C | Target: 70.0°C | Error:  +0.0°C | Fan:  40.0% | P: +0.00 I:+0.00 D:+0.00 T:+10.00
+[TEST] 66.0°C (pkg: 65.5 fan: 66.5) | Tgt: 65.0°C | Err: +1.0°C | Fan: 22.5% | PID +1.0 +0.5 +0.2 °C | PID: +3.0 +0.1 +2.0 %fanspeed
+67.0°C (pkg: 67.0 fan: 67.0) | Tgt: 65.0°C | Err: +2.0°C | Fan: 24.8% | PID +2.0 +1.2 +0.5 °C | PID: +6.0 +0.2 +5.0 %fanspeed
+65.0°C (pkg: 64.5 fan: 65.5) | Tgt: 65.0°C | Err: +0.0°C | Fan: 20.0% | PID +0.0 +0.8 -0.3 °C | PID: +0.0 +0.2 -3.0 %fanspeed
 ```
 
 ### Fields
 
-- **[TEST]/[LIVE]** - Operating mode
-- **Iteration number** - Counter
-- **Temp** - Current CPU temperature (from temp2 sensor)
-- **Target** - Desired temperature
-- **Error** - Current minus target (positive = too hot, negative = too cold)
-- **Fan** - Commanded fan speed percentage (sum of P+I+D+T, clamped to min/max)
-- **P** - Proportional term contribution (percentage points)
-- **I** - Integral term contribution (percentage points, currently disabled)
-- **D** - Derivative term contribution (percentage points, currently disabled)
-- **T** - Temperature derivative term contribution (percentage points)
+- **[TEST]** - Shows "[TEST] " prefix only in test mode, no prefix in live mode
+- **Temp** - Combined temperature (average of cpu_package and max fanctl sensor)
+- **(pkg: X fan: Y)** - Individual temperature sources: coretemp CPU package and fanctl max sensor
+- **Tgt** - Desired temperature
+- **Err** - Current minus target (positive = too hot, negative = too cold)
+- **Fan** - Commanded fan speed percentage (base_speed + P + I + D, clamped to min/max)
+- **PID ... °C** - P, I, D terms as temperature-equivalent contributions (how many degrees of error would produce this contribution)
+  - P term: actual temperature error
+  - I term: integral contribution expressed as equivalent temperature error (i_term / Kp)
+  - D term: derivative contribution expressed as rate of change
+- **PID: ... %fanspeed** - P, I, D terms as fan speed percentage contributions
 
 ## PID Algorithm
 
-The controller uses four terms to calculate fan speed:
+The controller uses a PID algorithm with three terms operating around a base speed (midpoint of fan range):
 
 ### P (Proportional) Term
 - **Kp = 3.0**
@@ -82,78 +95,106 @@ The controller uses four terms to calculate fan speed:
 - Example: If 5°C too hot, adds 15% fan speed (3.0 × 5)
 
 ### I (Integral) Term
-- **Ki = 0.0 (disabled)**
-- Eliminates steady-state error over time
-- Currently disabled as the P+T control reaches target accurately
-- Has anti-windup protection to prevent overshooting if enabled
+- **Ki = 0.2**
+- Eliminates steady-state error by accumulating error over time
+- One-sided: only accumulates when temp > target (cooling control only)
+- Dynamic limits: can only fill remaining headroom after P+D contributions, with minimum quarter-range guarantee
+- Conditional integration anti-windup: stops accumulating when previous output was saturated
+- Example: If error persists for 10 seconds, adds 2% fan speed (0.2 × 10)
 
 ### D (Derivative) Term
-- **Kd = 0.0 (disabled)**
-- Dampens oscillations by predicting future error
-- Currently disabled as it's mathematically equivalent to the T term
-- Would calculate d(error)/dt = d(temp - target)/dt = d(temp)/dt
-
-### T (Temperature Derivative) Term
-- **Kt = 5.0**
-- Responds immediately to rate of temperature change
-- Example: If temp rising at 2°C/s, adds 10% fan speed (5.0 × 2)
-- Provides feedforward control independent of error sign
-- Mathematically equivalent to D term but clearer semantics
+- **Kd = 10.0**
+- Responds to rate of temperature change for immediate reaction
+- Calculates d(error)/dt = d(temp - target)/dt = d(temp)/dt (since target is constant)
+- Exponentially smoothed to reduce oscillations (configurable half-life, default 1s)
+- Smoothing includes compensation scaling (multiply by 2/halflife) to maintain proper gain
+- Example: If temp rising at 2°C/s, adds 20% fan speed (10.0 × 2)
 
 ### Formula
 
 ```
-output = (Kp × error) + (Ki × ∫error dt) + (Kd × d(error)/dt) + (Kt × d(temp)/dt)
-```
-
-Currently simplified to:
-```
-output = (Kp × error) + (Kt × d(temp)/dt)
+base_speed = (min_speed + max_speed) / 2
+output = base_speed + (Kp × error) + (Ki × ∫error dt) + (Kd × d(error)/dt)
 ```
 
 Then clamped to [min_speed, max_speed] range.
 
+**Key insight**: The controller operates around the midpoint of the fan range. At target temperature with no error, the fan runs at base_speed (e.g., 20% for a 10-30% range), not at minimum speed.
+
 ## How It Works
 
-1. **Read temperature** from CPU fan sensor using `fanctl status`
+1. **Read temperatures** from two sources:
+   - **coretemp**: CPU package temperature (fast updates, 10-100 Hz, smoothed with 1s half-life)
+   - **fanctl**: Max temperature across fan sensors (slow updates, 1-2 Hz, smoothed with 2s half-life)
+   - **Combined**: Average of both sources for optimal balance
 2. **Calculate error** = current_temp - target_temp
-3. **Apply PID algorithm** to compute desired fan speed
-4. **Clamp to limits** (min_speed to max_speed)
-5. **Set both fans** to calculated speed using `fanctl set`
-6. **Wait 1 second** and repeat
+3. **Apply PID algorithm** to compute desired fan speed around base_speed
+4. **Smooth D term** (exponentially, 1s half-life) to reduce oscillations
+5. **Smooth final output** (exponentially, 4s half-life) to prevent wild fan speed changes
+6. **Clamp to limits** (min_speed to max_speed)
+7. **Set both fans** to calculated speed using `fanctl set`
+8. **Wait** (default 0.5s) and repeat
+
+The multi-level smoothing prevents oscillations while maintaining good responsiveness to actual temperature changes.
 
 ## Tuning
 
 If the default parameters don't work well for your use case, edit `config.py`:
 
 ```python
-KP = 3.0   # Proportional gain
-KI = 0.0   # Integral gain (disabled)
-KD = 0.0   # Derivative gain (disabled)
-KT = 5.0   # Temperature derivative gain
+class PIDConfig:
+    KP = 3.0    # Proportional gain
+    KI = 0.2    # Integral gain
+    KD = 10.0   # Derivative gain
+    ONE_SIDED_INTEGRAL = True  # One-sided (cooling only) vs bidirectional
+
+class ControlConfig:
+    MIN_SPEED = 10         # Minimum fan speed %
+    MAX_SPEED = 30         # Maximum fan speed %
+    TARGET_TEMP = 65       # Target temperature °C
+    UPDATE_INTERVAL = 0.5  # Update interval in seconds
+
+class SmoothingConfig:
+    CORETEMP_HALFLIFE = 1.0    # CPU package temp smoothing
+    FANCTL_TEMP_HALFLIFE = 2.0  # Fanctl sensor smoothing
+    D_TERM_HALFLIFE = 1.0       # Derivative term smoothing
+    FANSPEED_HALFLIFE = 4.0     # Final fan speed smoothing
 ```
 
 ### Tuning Guidelines
 
 **Temperature oscillates:**
 - Decrease Kp (less aggressive response to error)
-- Decrease Kt (less aggressive response to rate changes)
+- Decrease Kd (less aggressive response to rate changes)
+- Increase FANSPEED_HALFLIFE or D_TERM_HALFLIFE (more smoothing)
 
 **Too slow to respond:**
 - Increase Kp (more aggressive)
-- Increase Kt (faster response to temperature changes)
+- Increase Kd (faster response to temperature changes)
+- Decrease smoothing half-lives (less smoothing, faster response)
 
 **Overshoots target:**
-- Decrease Kt (less aggressive on rate changes)
+- Decrease Kd (less aggressive on rate changes)
 - Decrease Kp (less aggressive on error)
+- Increase FANSPEED_HALFLIFE (slower fan speed changes)
 
 **Steady-state offset (temp settles away from target):**
-- Enable Ki by setting it to 0.1-0.5 (adds long-term correction)
-- This is rarely needed with PT control
+- Increase Ki (faster integral accumulation)
+- Set ONE_SIDED_INTEGRAL = False for bidirectional integral (provides averaging)
 
 **Fans too noisy/aggressive:**
-- Reduce Kt (main contributor to fan speed changes)
-- Increase update interval with `-i` flag (e.g., `-i 2.0` for slower updates)
+- Reduce Kd (main contributor to rapid fan speed changes)
+- Increase FANSPEED_HALFLIFE (slower fan speed transitions)
+- Increase update interval with `-i` flag (e.g., `-i 1.0` for slower updates)
+- Narrow the fan speed range (e.g., 15-25% instead of 10-30%)
+
+### Debug Mode
+
+For debugging purposes, you can disable smoothing by setting half-life values to 0:
+- **D_TERM_HALFLIFE = 0** - Disables D term smoothing (uses raw derivative)
+- **FANSPEED_HALFLIFE = 0** - Disables fan speed smoothing (immediate response)
+
+This allows you to observe the raw controller behavior without smoothing effects.
 
 ## Stopping
 
@@ -236,6 +277,8 @@ pid_control/
 ├── fan-pid-control.py       - Main script (entry point)
 ├── pid_controller.py        - PID algorithm implementation
 ├── fan_controller.py        - Hardware interface (fanctl wrapper)
+├── coretemp_reader.py       - CPU package temperature reader
+├── fanctl_temp_reader.py    - Fanctl temperature sensor reader
 ├── config.py                - Configuration and validation
 └── README.md                - This file
 ```
@@ -245,14 +288,15 @@ pid_control/
 **fan-pid-control.py**
 - Main entry point
 - Argument parsing
-- Control loop
+- Control loop with dual temperature sources
 - Signal handling
 
 **pid_controller.py**
 - `PIDController` class
 - PID algorithm with P, I, D terms
-- Anti-windup protection
-- Output clamping
+- Conditional integration anti-windup
+- Exponential smoothing for D term and final output
+- Output clamping around base speed (midpoint of range)
 
 **fan_controller.py**
 - `FanController` class
@@ -260,8 +304,22 @@ pid_control/
 - Parses fan status output
 - Sends fan speed commands
 
+**coretemp_reader.py**
+- `CoretempReader` class
+- Reads CPU package temperature from hwmon
+- Exponential smoothing (configurable half-life)
+- Fast updates (10-100 Hz)
+
+**fanctl_temp_reader.py**
+- `FanctlTempReader` class
+- Reads temperatures from fanctl sensors
+- Returns smoothed maximum across all sensors
+- Slow updates (1-2 Hz)
+
 **config.py**
-- `PIDConfig` class - PID tuning parameters
+- `PIDConfig` class - PID tuning parameters (Kp, Ki, Kd, ONE_SIDED_INTEGRAL)
+- `ControlConfig` class - Default control parameters (speeds, target, interval)
+- `SmoothingConfig` class - Exponential smoothing half-lives
 - `ValidationConfig` class - Input validation limits
 - `validate_arguments()` function
 
@@ -272,21 +330,23 @@ fan-pid-control.py
     |
     | imports
     v
-pid_controller.py, fan_controller.py, config.py
+pid_controller.py, fan_controller.py, coretemp_reader.py, fanctl_temp_reader.py, config.py
     |
-    | subprocess calls
-    v
-fanctl binary
+    +-- coretemp_reader.py -----> /sys/class/hwmon/hwmon*/temp*_input (CPU package temp)
     |
-    | ioctl() system calls
-    v
-/dev/tuxedo_io (Clevo interface)
+    +-- fanctl_temp_reader.py --> fanctl binary --> /dev/tuxedo_io (fan sensor temps)
     |
-    v
-Embedded Controller
-    |
-    v
-Physical fans
+    +-- fan_controller.py -------> fanctl binary --> /dev/tuxedo_io (fan control)
+                                       |
+                                       | ioctl() system calls
+                                       v
+                                   /dev/tuxedo_io (Clevo interface)
+                                       |
+                                       v
+                                   Embedded Controller
+                                       |
+                                       v
+                                   Physical fans
 ```
 
 ## License

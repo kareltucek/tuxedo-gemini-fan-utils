@@ -165,12 +165,20 @@ def control_loop(fan_ctrl, read_temp_fn, pid, target_temp, interval, test_mode):
         # Display status every iteration
         iteration += 1
         error = current_temp - target_temp
-        mode_indicator = "[TEST]" if test_mode else "[LIVE]"
-        print(f"{mode_indicator} [{iteration:4d}] Temp: {current_temp:5.1f}°C (pkg:{cpu_package_temp:5.1f} fan:{fanctl_max_temp:5.1f}) | "
-              f"Target: {target_temp:.1f}°C | "
-              f"Error: {error:+5.1f}°C | "
+        mode_indicator = "[TEST] " if test_mode else ""
+
+        # Convert PID terms to temperature-equivalent contributions for display
+        # All terms shown as "how many degrees of error would produce this contribution"
+        p_input = p_term / PIDConfig.KP if PIDConfig.KP != 0 else 0
+        i_input = i_term / PIDConfig.KP if PIDConfig.KP != 0 else 0  # Integral as temp-equivalent
+        d_input = d_term / PIDConfig.KD if PIDConfig.KD != 0 else 0
+
+        print(f"{mode_indicator}{current_temp:4.1f}°C (pkg:{cpu_package_temp:5.1f} fan:{fanctl_max_temp:5.1f}) | "
+              f"Tgt: {target_temp:.1f}°C | "
+              f"Err: {error:+5.1f}°C | "
               f"Fan: {fan_speed_pct:5.1f}% | "
-              f"P:{p_term:+6.2f} I:{i_term:+6.2f} D:{d_term:+6.2f}")
+              f"PID {p_input:+4.1f} {i_input:+4.1f} {d_input:+4.1f} °C | "
+              f"PID: {p_term:+4.1f} {i_term:+4.1f} {d_term:+4.1f} %fanspeed")
 
         # Sleep until next iteration
         time.sleep(interval)

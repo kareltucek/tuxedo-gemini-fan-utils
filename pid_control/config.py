@@ -13,7 +13,7 @@ class PIDConfig:
 
     # Kp: Proportional gain - higher = more aggressive response to error
     # Default: 3.0 means increase fan speed by 3% per degree over target
-    KP = 3.0
+    KP = 2.0
 
     # Ki: Integral gain - higher = faster elimination of steady-state error
     # Default: 0.2 provides gradual correction of persistent offset
@@ -23,12 +23,15 @@ class PIDConfig:
     # Kd: Derivative gain - responds to rate of temperature change
     # Default: 5.0 means increase fan 5% per degree/second temperature rise
     # Provides immediate response when temperature is rising
-    KD = 10.0
+    KD = 5
 
     # Integral behavior
     # ONE_SIDED_INTEGRAL: If True, integral only accumulates when temp > target (cooling only)
     #                     If False, integral is bidirectional (provides averaging/stabilization)
-    ONE_SIDED_INTEGRAL = True
+    #
+    # This makes sense only with high integral gain. Otherwise it will always be overpowered
+    # by the derivative gain when we need to start cooling quickly because of rising temp.
+    ONE_SIDED_INTEGRAL = False
 
 
 class ControlConfig:
@@ -66,7 +69,7 @@ class SmoothingConfig:
 
     # Fan speed smoothing (seconds)
     # Smooths fan speed commands to prevent rapid changes
-    FANSPEED_HALFLIFE = 4.0
+    FANSPEED_HALFLIFE = 4
 
 
 class ValidationConfig:

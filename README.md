@@ -66,7 +66,10 @@ _Here ends the human-produced text. Rest is machine-generated._
 Automatic fan controller that maintains a target temperature using a PID algorithm.
 
 ```bash
-# Usage: sudo ./pid_control/fan-pid-control.py [-t] [-i interval] <min_speed%> <max_speed%> <target_temp°C>
+# Usage: sudo ./pid_control/fan-pid-control.py [-t] [-i interval] [min_speed% max_speed% target_temp°C]
+
+# Example: Use defaults from config.py
+sudo ./pid_control/fan-pid-control.py
 
 # Example: Maintain 70°C with fan speeds between 10-30%
 sudo ./pid_control/fan-pid-control.py 10 30 70
@@ -76,43 +79,42 @@ sudo ./pid_control/fan-pid-control.py -i 0.5 10 30 70
 ```
 
 **Features:**
-- Runs continuously (default 1 Hz, configurable with `-i` flag)
+- Runs continuously (default 0.5s interval, configurable with `-i` flag)
 - PID controller automatically adjusts fan speeds
+- Dual temperature sources (fast coretemp + slow fanctl sensors)
+- Multi-level exponential smoothing to prevent oscillations
 - Sets both CPU and GPU fans to same speed
 - Graceful shutdown on Ctrl+C (returns to auto mode)
-- Real-time status display with PID terms
+- Real-time status display with PID terms in both physical and percentage units
 
 **Example output:**
 ```
 ======================================================================
 PID Fan Controller
 ======================================================================
-Target temperature: 70°C
-Fan speed range: 30% - 100%
-Update interval: 1.0s (1.0 Hz)
-PID parameters: Kp=3.0, Ki=0.0, Kd=0.0, Kt=5.0
+Target temperature: 65°C
+Fan speed range: 10% - 30%
+Update interval: 0.5s (2.0 Hz)
+PID parameters: Kp=3.0, Ki=0.2, Kd=10.0
 
 Press Ctrl+C to stop and return to automatic control
 ======================================================================
 
-[   1] Temp:  66.0°C | Target: 70.0°C | Error: -4.0°C | Fan:  30.0% | P:-12.00 I:+0.00 D:+0.00 T:+0.00
-[   2] Temp:  68.0°C | Target: 70.0°C | Error: -2.0°C | Fan:  46.0% | P: -6.00 I:+0.00 D:+0.00 T:+10.00
-[   3] Temp:  70.0°C | Target: 70.0°C | Error: +0.0°C | Fan:  40.0% | P: +0.00 I:+0.00 D:+0.00 T:+10.00
+66.0°C (pkg: 65.5 fan: 66.5) | Tgt: 65.0°C | Err: +1.0°C | Fan: 22.5% | PID +1.0 +0.5 +0.2 °C | PID: +3.0 +0.1 +2.0 %fanspeed
+67.0°C (pkg: 67.0 fan: 67.0) | Tgt: 65.0°C | Err: +2.0°C | Fan: 24.8% | PID +2.0 +1.2 +0.5 °C | PID: +6.0 +0.2 +5.0 %fanspeed
 ```
 
 **PID Parameters:**
 - **Kp (Proportional)**: 3.0 - Increase fan 3% per degree above target
-- **Ki (Integral)**: 0.0 - Disabled (no steady-state correction needed)
-- **Kd (Derivative)**: 0.0 - Disabled (redundant with Kt)
-- **Kt (Temperature derivative)**: 5.0 - Immediate response to temperature changes
+- **Ki (Integral)**: 0.2 - Gradual correction of steady-state error (one-sided: only accumulates when temp > target)
+- **Kd (Derivative)**: 10.0 - Responds to rate of temperature change, increasing fan 10% per °C/s temperature rise
 
 These can be adjusted in `pid_control/config.py` if needed.
 
 **How the controller works:**
 - **P term**: Reacts to current error (temp - target)
-- **I term**: Disabled (set to 0)
-- **D term**: Disabled (set to 0)
-- **T term**: Responds to rate of temperature change (°C/s) for immediate reaction
+- **I term**: Accumulates error over time to eliminate steady-state offset (one-sided: cooling only)
+- **D term**: Responds to rate of temperature change for immediate reaction to rising temps
 
 **Safety:**
 - Enforces min/max fan speed limits
@@ -221,26 +223,30 @@ sudo systemctl start tccd
 
 ### PID controller oscillates
 - Reduce Kp (proportional gain)
-- Reduce Kt (temperature derivative gain)
+- Reduce Kd (derivative gain)
+- Increase smoothing half-lives in config.py (FANSPEED_HALFLIFE, D_TERM_HALFLIFE)
 - Adjust target temperature closer to natural idle
 
 ### Fans too aggressive
 - Lower max_speed parameter
 - Reduce Kp gain
-- Reduce Kt gain
+- Reduce Kd gain
 - Increase target temperature
 
 ### Fans too slow to respond
 - Increase Kp gain
-- Increase Kt gain
+- Increase Kd gain
+- Decrease smoothing half-lives in config.py
 - Lower min_speed to allow more range
 
 ### Temperature overshoots
-- Reduce Kt (temperature derivative gain)
+- Reduce Kd (derivative gain)
 - Reduce Kp gain
+- Increase FANSPEED_HALFLIFE for slower fan speed changes
 
 ### Steady-state error (temp settles away from target)
-- Enable Ki (integral gain) by setting it to 0.1-0.5 in config.py
+- Increase Ki (integral gain) in config.py (currently 0.2)
+- Check ONE_SIDED_INTEGRAL setting - if False, provides bidirectional averaging
 
 ## License
 
