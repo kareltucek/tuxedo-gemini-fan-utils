@@ -132,22 +132,30 @@ def control_loop(fan_ctrl, pid, target_temp, interval, test_mode):
     """
     last_time = time.time()
     iteration = 0
+    prev_temp = None
+    fan_speed_pct = 0
+    p_term = i_term = d_term = t_term = 0
 
     while True:
         current_time = time.time()
         dt = current_time - last_time
-        last_time = current_time
 
         # Read CPU temperature (fan 0 = CPU)
         current_speed_pct, temp1, temp2 = fan_ctrl.read_fan_info(0)
         current_temp = temp2  # temp2 is generally more reliable
 
-        # Compute PID output
-        fan_speed_pct, p_term, i_term, d_term, t_term = pid.compute(target_temp, current_temp, dt)
+        # Only update PID if temperature has changed
+        # This prevents incorrect derivative calculations when sensor updates slowly
+        if prev_temp is None or current_temp != prev_temp:
+            last_time = current_time
+            prev_temp = current_temp
 
-        # Set both fans to same speed
-        fan_ctrl.set_fan_speed(0, fan_speed_pct)  # CPU fan
-        fan_ctrl.set_fan_speed(1, fan_speed_pct)  # GPU fan
+            # Compute PID output
+            fan_speed_pct, p_term, i_term, d_term, t_term = pid.compute(target_temp, current_temp, dt)
+
+            # Set both fans to same speed
+            fan_ctrl.set_fan_speed(0, fan_speed_pct)  # CPU fan
+            fan_ctrl.set_fan_speed(1, fan_speed_pct)  # GPU fan
 
         # Display status every iteration
         iteration += 1
