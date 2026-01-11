@@ -31,6 +31,7 @@ class PIDController:
         self.prev_temp = None
         self.integral = 0.0
         self.prev_t_term = 0.0  # Track T term for decay when temp unchanged
+        self.prev_d_term = 0.0  # Track D term for decay when temp unchanged
         self.time_since_temp_change = 0.0  # Accumulate time since temp last changed
 
     def compute(self, setpoint, current_value, dt):
@@ -64,9 +65,21 @@ class PIDController:
         self.integral = max(0, min(max_integral, self.integral))
         i_term = self.ki * self.integral
 
-        # Derivative term on error (skip on first iteration when dt is tiny)
-        if dt > 0.1:  # Only compute derivative after first real iteration
-            d_term = self.kd * (error - self.prev_error) / dt
+        # Derivative term on error
+        # Note: d(error)/dt = d(temp - target)/dt = d(temp)/dt (target is constant)
+        # So D and T are mathematically equivalent and should be handled identically
+        if self.prev_temp is not None:
+            if current_value != self.prev_temp:
+                # Temperature changed - calculate derivative using accumulated time
+                accumulated_dt = self.time_since_temp_change + dt
+                if accumulated_dt > 0.1:  # Skip if too small
+                    d_term = self.kd * (error - self.prev_error) / accumulated_dt
+                else:
+                    d_term = 0
+            else:
+                # Temperature unchanged - decay previous D term
+                decay_factor = 0.8 ** dt
+                d_term = self.prev_d_term * decay_factor
         else:
             d_term = 0
 
@@ -95,6 +108,7 @@ class PIDController:
         # Save state for next iteration
         self.prev_error = error
         self.prev_temp = current_value
+        self.prev_d_term = d_term
         self.prev_t_term = t_term
 
         # Calculate output
@@ -113,5 +127,6 @@ class PIDController:
         self.prev_error = 0.0
         self.prev_temp = None
         self.integral = 0.0
+        self.prev_d_term = 0.0
         self.prev_t_term = 0.0
         self.time_since_temp_change = 0.0
