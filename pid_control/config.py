@@ -17,8 +17,8 @@ class PIDConfig:
 
     # Ki: Integral gain - higher = faster elimination of steady-state error
     # Default: 0.2 provides gradual correction of persistent offset
-    # DISABLED: Set to 0 to avoid overshoot and oscillation
-    KI = 0.0
+    # One-sided: only accumulates when temp > target (cooling control)
+    KI = 0.2
 
     # Kd: Derivative gain - responds to rate of temperature change
     # Default: 5.0 means increase fan 5% per degree/second temperature rise
