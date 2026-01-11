@@ -4,7 +4,7 @@ PID Controller implementation
 Proportional-Integral-Derivative controller for temperature regulation.
 """
 
-from config import SmoothingConfig
+from config import SmoothingConfig, PIDConfig
 
 
 class PIDController:
@@ -57,15 +57,7 @@ class PIDController:
         # Proportional term
         p_term = self.kp * error
 
-        # Integral term (with anti-windup)
-        self.integral += error * dt
-        # Clamp integral to [0, max_integral] for cooling control
-        # Non-negative prevents reducing fan speed when temp is below target
-        max_integral = (self.max_output - self.min_output) / self.ki if self.ki != 0 else 1000
-        self.integral = max(0, min(max_integral, self.integral))
-        i_term = self.ki * self.integral
-
-        # Derivative term on error
+        # Derivative term on error (calculate before integral for anti-windup)
         # Note: d(error)/dt = d(temp - target)/dt = d(temp)/dt (target is constant)
         # Responds to rate of temperature change for immediate response
         if self.prev_temp is not None:
@@ -92,6 +84,34 @@ class PIDController:
         self.smoothed_d_term = alpha * self.smoothed_d_term + (1 - alpha) * raw_d_term
         d_term = self.smoothed_d_term
 
+        # Integral term with conditional integration anti-windup
+        # Check if output would be saturated before accumulating
+        base_speed = (self.min_output + self.max_output) / 2.0
+        current_i_term = self.ki * self.integral
+        test_output = base_speed + p_term + current_i_term + d_term
+
+        # Determine integral limits
+        max_integral = (self.max_output - self.min_output) / self.ki if self.ki != 0 else 1000
+        if PIDConfig.ONE_SIDED_INTEGRAL:
+            min_integral = 0
+        else:
+            min_integral = -max_integral
+
+        # Conditional integration: only accumulate if not saturated in that direction
+        if error > 0 and test_output >= self.max_output:
+            # Output saturated at max, don't accumulate upward
+            pass
+        elif error < 0 and test_output <= self.min_output:
+            # Output saturated at min, don't accumulate downward
+            pass
+        else:
+            # Not saturated, accumulate normally
+            self.integral += error * dt
+            # Clamp to limits
+            self.integral = max(min_integral, min(max_integral, self.integral))
+
+        i_term = self.ki * self.integral
+
         # Save state for next iteration
         self.prev_error = error
         self.prev_temp = current_value
@@ -99,7 +119,6 @@ class PIDController:
 
         # Calculate output
         # Base speed is midpoint of range, PID terms modulate around it
-        base_speed = (self.min_output + self.max_output) / 2.0
         raw_output = base_speed + p_term + i_term + d_term
 
         # Apply exponential smoothing to output with configured half-life

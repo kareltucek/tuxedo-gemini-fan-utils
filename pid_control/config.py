@@ -13,7 +13,7 @@ class PIDConfig:
 
     # Kp: Proportional gain - higher = more aggressive response to error
     # Default: 3.0 means increase fan speed by 3% per degree over target
-    KP = 1.0
+    KP = 3.0
 
     # Ki: Integral gain - higher = faster elimination of steady-state error
     # Default: 0.2 provides gradual correction of persistent offset
@@ -24,6 +24,11 @@ class PIDConfig:
     # Default: 5.0 means increase fan 5% per degree/second temperature rise
     # Provides immediate response when temperature is rising
     KD = 10.0
+
+    # Integral behavior
+    # ONE_SIDED_INTEGRAL: If True, integral only accumulates when temp > target (cooling only)
+    #                     If False, integral is bidirectional (provides averaging/stabilization)
+    ONE_SIDED_INTEGRAL = True
 
 
 class ControlConfig:
@@ -37,7 +42,7 @@ class ControlConfig:
     TARGET_TEMP = 65
 
     # Control loop update interval (seconds)
-    UPDATE_INTERVAL = 0.2
+    UPDATE_INTERVAL = 0.5
 
 
 class SmoothingConfig:
@@ -53,7 +58,7 @@ class SmoothingConfig:
 
     # Fanctl temperature sensor smoothing (seconds)
     # Smooths fanctl sensor readings (which update slowly ~1-2 Hz)
-    FANCTL_TEMP_HALFLIFE = 1.0
+    FANCTL_TEMP_HALFLIFE = 2.0
 
     # D term smoothing (seconds)
     # Smooths derivative term oscillations
