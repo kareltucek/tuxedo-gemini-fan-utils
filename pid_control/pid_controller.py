@@ -158,20 +158,28 @@ class PIDController:
         # Base speed is midpoint of range, PID terms modulate around it
         raw_output = base_speed + p_term + i_term + d_term
 
-        # Apply exponential smoothing to output with configured half-life
+        # Clamp raw output to min/max range BEFORE smoothing
+        # This prevents smoothing windup when output saturates
+        raw_output_clamped = raw_output
+        if raw_output_clamped < self.min_output:
+            raw_output_clamped = self.min_output
+        elif raw_output_clamped > self.max_output:
+            raw_output_clamped = self.max_output
+
+        # Apply exponential smoothing to CLAMPED output
         # This prevents wild fan speed oscillations
         # If half-life is 0, disable smoothing (for debugging)
         if SmoothingConfig.FANSPEED_HALFLIFE == 0:
-            output = raw_output
+            output = raw_output_clamped
         else:
             if self.smoothed_output is None:
-                self.smoothed_output = raw_output
+                self.smoothed_output = raw_output_clamped
             else:
                 alpha = pow(0.5, dt / SmoothingConfig.FANSPEED_HALFLIFE)
-                self.smoothed_output = alpha * self.smoothed_output + (1 - alpha) * raw_output
+                self.smoothed_output = alpha * self.smoothed_output + (1 - alpha) * raw_output_clamped
             output = self.smoothed_output
 
-        # Clamp output to min/max range
+        # Final clamp (should be redundant but ensures output is always in range)
         if output < self.min_output:
             output = self.min_output
         elif output > self.max_output:
@@ -180,7 +188,7 @@ class PIDController:
         # Save clamped output for anti-windup check on next iteration
         self.prev_output = output
 
-        return output, p_term, i_term, d_term
+        return output, raw_output_clamped, p_term, i_term, d_term
 
     def reset(self):
         """Reset PID state"""

@@ -156,7 +156,7 @@ def control_loop(fan_ctrl, read_temp_fn, pid, target_temp, interval, test_mode):
         current_temp, cpu_package_temp, fanctl_max_temp = read_temp_fn()
 
         # Compute PID output (handles temp change detection and D term decay internally)
-        fan_speed_pct, p_term, i_term, d_term = pid.compute(target_temp, current_temp, dt)
+        fan_speed_pct, raw_fan_speed, p_term, i_term, d_term = pid.compute(target_temp, current_temp, dt)
 
         # Set both fans to same speed
         fan_ctrl.set_fan_speed(0, fan_speed_pct)  # CPU fan
@@ -176,7 +176,7 @@ def control_loop(fan_ctrl, read_temp_fn, pid, target_temp, interval, test_mode):
         print(f"{mode_indicator}{current_temp:4.1f}°C (pkg:{cpu_package_temp:5.1f} fan:{fanctl_max_temp:5.1f}) | "
               f"Tgt: {target_temp:.1f}°C | "
               f"Err: {error:+5.1f}°C | "
-              f"Fan: {fan_speed_pct:5.1f}% | "
+              f"Fan: {raw_fan_speed:5.1f}% -> {fan_speed_pct:5.1f}% | "
               f"PID {p_input:+4.1f} {i_input:+4.1f} {d_input:+4.1f} °C | "
               f"PID: {p_term:+4.1f} {i_term:+4.1f} {d_term:+4.1f} %fanspeed")
 

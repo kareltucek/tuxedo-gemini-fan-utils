@@ -23,7 +23,7 @@ class PIDConfig:
     # Kd: Derivative gain - responds to rate of temperature change
     # Default: 5.0 means increase fan 5% per degree/second temperature rise
     # Provides immediate response when temperature is rising
-    KD = 5
+    KD = 10.0
 
     # Integral behavior
     # ONE_SIDED_INTEGRAL: If True, integral only accumulates when temp > target (cooling only)
@@ -42,7 +42,7 @@ class ControlConfig:
     MAX_SPEED = 30
 
     # Target temperature (Celsius)
-    TARGET_TEMP = 65
+    TARGET_TEMP = 70
 
     # Control loop update interval (seconds)
     UPDATE_INTERVAL = 0.5
@@ -65,7 +65,7 @@ class SmoothingConfig:
 
     # D term smoothing (seconds)
     # Smooths derivative term oscillations
-    D_TERM_HALFLIFE = 1.0
+    D_TERM_HALFLIFE = 2
 
     # Fan speed smoothing (seconds)
     # Smooths fan speed commands to prevent rapid changes
