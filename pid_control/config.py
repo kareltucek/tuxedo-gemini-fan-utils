@@ -72,6 +72,19 @@ class SmoothingConfig:
     FANSPEED_HALFLIFE = 4
 
 
+class TemperatureWeightConfig:
+    """Temperature source weighting configuration"""
+
+    # Weights for combining coretemp and fanctl temperature readings
+    # Combined temp = (CORETEMP_WEIGHT * coretemp + FANCTL_WEIGHT * fanctl) / (CORETEMP_WEIGHT + FANCTL_WEIGHT)
+
+    # Coretemp (CPU package) weight - fast updates (10-100 Hz)
+    CORETEMP_WEIGHT = 1.0
+
+    # Fanctl (fan sensors) weight - slow updates (1-2 Hz)
+    FANCTL_WEIGHT = 1.0
+
+
 class ValidationConfig:
     """Input validation limits"""
 

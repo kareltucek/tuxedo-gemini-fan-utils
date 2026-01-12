@@ -38,7 +38,7 @@ from pid_controller import PIDController
 from fan_controller import FanController
 from fanctl_temp_reader import FanctlTempReader
 from coretemp_reader import CoretempReader
-from config import PIDConfig, ControlConfig, ValidationConfig, validate_arguments
+from config import PIDConfig, ControlConfig, ValidationConfig, TemperatureWeightConfig, validate_arguments
 
 
 def parse_arguments():
@@ -199,11 +199,14 @@ def main():
     fanctl_temp = FanctlTempReader(fanctl_path)
     coretemp = CoretempReader()
 
-    # Create temperature reading function (combines both sources)
+    # Create temperature reading function (combines both sources with weighted average)
     def read_temp():
         cpu_package_temp = coretemp.read_temperature()
         fanctl_max_temp = fanctl_temp.read_max_temperature()
-        combined_temp = (cpu_package_temp + fanctl_max_temp) / 2.0
+        # Weighted average based on TemperatureWeightConfig
+        total_weight = TemperatureWeightConfig.CORETEMP_WEIGHT + TemperatureWeightConfig.FANCTL_WEIGHT
+        combined_temp = (TemperatureWeightConfig.CORETEMP_WEIGHT * cpu_package_temp +
+                        TemperatureWeightConfig.FANCTL_WEIGHT * fanctl_max_temp) / total_weight
         return combined_temp, cpu_package_temp, fanctl_max_temp
 
     # Initialize PID controller
