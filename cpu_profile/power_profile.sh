@@ -138,6 +138,9 @@ case "$profile" in
     powersave)
         enable_cpu_range 0 31 "$MIN_FREQ_MHZ"
         ;;
+    balanced)
+        enable_cpu_range 0 31 "4000"
+        ;;
     status)
         show_status
         exit 0

@@ -79,10 +79,10 @@ class TemperatureWeightConfig:
     # Combined temp = (CORETEMP_WEIGHT * coretemp + FANCTL_WEIGHT * fanctl) / (CORETEMP_WEIGHT + FANCTL_WEIGHT)
 
     # Coretemp (CPU package) weight - fast updates (10-100 Hz)
-    CORETEMP_WEIGHT = 1.0
+    CORETEMP_WEIGHT = 1
 
     # Fanctl (fan sensors) weight - slow updates (1-2 Hz)
-    FANCTL_WEIGHT = 1.0
+    FANCTL_WEIGHT = 0
 
 
 class ValidationConfig:
