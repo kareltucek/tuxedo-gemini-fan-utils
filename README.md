@@ -12,10 +12,10 @@ Quiet laptop for software development.
 
 Because the default tuxedo/intel power and cooling management stack is just unsatisfactory - loud, inefficient, providing unsatisfactory cpu performance for blocking tasks (like compilation - these are often limited by singlethread work) while often unexpectedly driving fans into sudden vacuum-cleaner spikes just because of background tasks that could happily run at efficient cores (like codebase indexing).
 
-## How 
+## How
 
-- maintain 70°C temperature with fans speeds limited to 10% - 30% range.
-- use 4 performance cores at 3.2Ghz and 16 efficiency cores at 1.2Ghz cpu profile to do the required work fast, yet at a bounded TPU.
+- Maintain 65-70°C temperature with fan speeds limited to 10% - 30% range using PID controller.
+- Limit CPU package power using Intel RAPL (Running Average Power Limit) to control heat and noise while maintaining good performance.
 
 ## Tools
 
@@ -23,9 +23,9 @@ Because the default tuxedo/intel power and cooling management stack is just unsa
 
 This script:
 
-- disables tccd (tuxedo-control-center daemon) for this session to prevent it fighting over cpu profiles and fan speeds
-- sets the quiet4 cpu profile.
-- starts the PID fan speed controller.
+- Disables tccd (tuxedo-control-center daemon) for this session to prevent it fighting over CPU power settings and fan speeds
+- Sets CPU power limit using RAPL
+- Starts the PID fan speed controller
 
 ### 2. fanctl - Manual Fan Control
 
@@ -41,13 +41,33 @@ sudo ./fanctl auto        # Return to automatic control
 
 See `fan_control/README.md` for detailed documentation.
 
-### 3. power_profile.sh - CPU Power Profile Script
+### 3. rapl.sh - CPU Power Limit Control (Recommended)
 
-Located in `cpu_profile/power_profile.sh` - Configures reasonable CPU power profiles to address the unsatisfactory default tuxedo/intel power management. 
+Located in `cpu_profile/rapl.sh` - Controls CPU power consumption using Intel RAPL (Running Average Power Limit).
+
+RAPL provides fine-grained power limiting at the package level, allowing all cores to run while staying within a power budget. This is more flexible than disabling cores and provides better performance/watt efficiency.
+
+```bash
+cd cpu_profile
+sudo ./rapl.sh status    # Show current power limits
+sudo ./rapl.sh 25        # Set 25W limit (very quiet, efficient)
+sudo ./rapl.sh 35        # Set 35W limit (balanced)
+sudo ./rapl.sh 45        # Set 45W limit (performance)
+```
+
+**Benefits over core limiting:**
+- All cores remain active and can be used when needed
+- Better single-threaded performance (no artificial frequency caps)
+- More efficient power usage (CPU dynamically adjusts to stay within limit)
+- Simpler management (one parameter vs. per-core frequency settings)
+
+### 4. power_profile.sh - CPU Power Profile Script (Alternative)
+
+Located in `cpu_profile/power_profile.sh` - Configures CPU power profiles by limiting active cores and frequencies. This is an alternative approach to RAPL limiting.
 
 The suggested profile is quiet4, which sets:
-- 4 performance cores to run at 3.2Ghz - for tasks that are blocked by single-thread performance - this is the highest frequency that works with a reasonable work-done/power ratio.
-- 16 efficiency cores to run at 1.2Ghz - to provide multithreaded performance with very good work/power ratio.
+- 4 performance cores to run at 3.2Ghz - for tasks that are blocked by single-thread performance
+- 16 efficiency cores to run at 1.2Ghz - to provide multithreaded performance
 
 ```bash
 cd cpu_profile
@@ -59,9 +79,11 @@ sudo ./power_profile.sh performance  # All cores at maximum frequency
 sudo ./power_profile.sh powersave    # All cores at minimum frequency
 ```
 
+**Note:** RAPL limiting (rapl.sh) is now preferred over core limiting for most use cases.
+
 _Here ends the human-produced text. Rest is machine-generated._
 
-### 4. fan-pid-control.py - PID Temperature Controller
+### 5. fan-pid-control.py - PID Temperature Controller
 
 Automatic fan controller that maintains a target temperature using a PID algorithm.
 

@@ -176,7 +176,7 @@ def control_loop(fan_ctrl, read_temp_fn, pid, target_temp, interval, test_mode):
         print(f"{mode_indicator}{current_temp:4.1f}°C (pkg:{cpu_package_temp:5.1f} fan:{fanctl_max_temp:5.1f}) | "
               f"Tgt: {target_temp:.1f}°C | "
               f"Err: {error:+5.1f}°C | "
-              f"Fan: {raw_fan_speed:5.1f}% -> {fan_speed_pct:5.1f}% | "
+              f"Fan: {fan_speed_pct:5.1f}% -> {raw_fan_speed:5.1f}% | "
               f"PID {p_input:+4.1f} {i_input:+4.1f} {d_input:+4.1f} °C | "
               f"PID: {p_term:+4.1f} {i_term:+4.1f} {d_term:+4.1f} %fanspeed")
 
